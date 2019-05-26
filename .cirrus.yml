@@ -3,53 +3,27 @@ container:
   cpu: 8
   memory: 16
 
-
+# Build packages.
 build_task:
+  # 2 hours is a maximal timeout for free use.
   timeout_in: 120m
 
   environment:
     matrix:
-      - TERMUX_ARCH: aarch64
-        LEGACY_ANDROID: false
-      - TERMUX_ARCH: aarch64
-        LEGACY_ANDROID: true
-      - TERMUX_ARCH: arm
-        LEGACY_ANDROID: false
-      - TERMUX_ARCH: arm
-        LEGACY_ANDROID: true
-      - TERMUX_ARCH: i686
-        LEGACY_ANDROID: false
-      - TERMUX_ARCH: i686
-        LEGACY_ANDROID: true
-      - TERMUX_ARCH: x86_64
-        LEGACY_ANDROID: false
-      - TERMUX_ARCH: x86_64
-        LEGACY_ANDROID: true
+      TERMUX_ARCH: aarch64
+      TERMUX_ARCH: arm
+      TERMUX_ARCH: i686
+      TERMUX_ARCH: x86_64
 
-  # Build modified packages.
+  # Determine changes in repository and build modified packages.
   build_script: |
-    bash ./scripts/cirrus-ci_dispatcher.sh
-
-  # Make built packages downloadable from web UI.
-  output_artifacts:
-    path: "./termux-packages/debs/*.deb"
-
-
-# Upload packages to Bintray.
-publish_task:
-  only_if: $CIRRUS_BRANCH == 'master'
-
-  timeout_in: 60m
-
-  depends_on:
-    - build
-
-  environment:
-    BINTRAY_USERNAME: ENCRYPTED[90abba51ac0c50d868f2d78ac4d48ed0fe8ecb79d53f15697afd261c440c7999cbe910696a65221668b3826cff3c756f]
-    BINTRAY_API_KEY: ENCRYPTED[0329a0c1d74d51a02f47e1ab5a079a017959bafa8b241cbc6a0404217a8719ed7ded99837db9c1846cb17309657dfc8d]
-    matrix:
-      - LEGACY_ANDROID: false
-      - LEGACY_ANDROID: true
-
-  upload_script: |
-    bash ./scripts/cirrus-ci_dispatcher.sh --upload
+    sudo service ssh start
+    mkdir -p "$HOME/.ssh"
+    # Maintainer's (@xeffyr) SSH public key.
+    echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH5jsA0CQfw+um7V7BGxERRKQSnKM8B1Wl33zieAu7/z" > "$HOME/.ssh/authorized_keys"
+    # Allow to stop debug shell on exit.
+    echo "kill \$(pgrep -f \"ssh -R \${CIRRUS_TASK_ID}\") &" > "$HOME/.shutdown_script"
+    echo "nohup bash \${HOME}/.shutdown_script > /dev/null 2>&1" > "$HOME/.bash_logout"
+    # Reverse SSH via Serveo.net.
+    # Connect with: ssh -J serveo.net builder@${CIRRUS_TASK_ID}
+    ssh -R "${CIRRUS_TASK_ID}:22:localhost:22" serveo.net || true
